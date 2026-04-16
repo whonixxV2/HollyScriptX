@@ -29,7 +29,6 @@ local Keybinds = {
     TeleportNearest = Enum.KeyCode.G
 }
 
-
 local function GetCharacter() return LocalPlayer.Character end
 local function GetHumanoid(c) return c and c:FindFirstChildOfClass("Humanoid") end
 local function GetRootPart(c) return c and c:FindFirstChild("HumanoidRootPart") end
@@ -43,6 +42,52 @@ local function IsUnsupportedExecutor()
         end
     end
     return false
+end
+
+local function IsXenoExecutor()
+    if identifyexecutor and type(identifyexecutor) == "function" then
+        local executor = identifyexecutor():lower()
+        if executor:find("xeno") or executor:find("x3no") then return true end
+    end
+    return false
+end
+
+local function IsFeatureSupported(featureName)
+    if IsXenoExecutor() then
+        local unsupportedFeatures = {
+            "AutoDodge", "FreeGuard", "AutoQTE", "Desync"
+        }
+        for _, f in ipairs(unsupportedFeatures) do
+            if f == featureName then
+                return false
+            end
+        end
+    end
+    return true
+end
+
+local function UpdateToggleAvailability(toggleName, gameName, toggleRef)
+    local isGameActive = false
+    if gameName then
+        local values = Workspace:FindFirstChild("Values")
+        if values then
+            local currentGame = values:FindFirstChild("CurrentGame")
+            isGameActive = currentGame and currentGame.Value == gameName
+        end
+    else
+        isGameActive = true
+    end
+    
+    local isSupported = IsFeatureSupported(toggleName)
+    
+    if toggleRef and toggleRef.SetDisabled then
+        local shouldDisable = (not isGameActive and gameName ~= nil) or not isSupported
+        pcall(function() toggleRef:SetDisabled(shouldDisable) end)
+        
+        if toggleRef.Value == true and not isGameActive and gameName ~= nil then
+            pcall(function() toggleRef:SetValue(false) end)
+        end
+    end
 end
 
 local function Notify(title, text, duration)
@@ -62,12 +107,109 @@ local function PlayBell()
     s.Ended:Connect(function() s:Destroy() end)
 end
 
-local function IsXenoExecutor()
-    if identifyexecutor and type(identifyexecutor) == "function" then
-        local executor = identifyexecutor():lower()
-        if executor:find("xeno") or executor:find("x3no") then return true end
+local Rebel = {
+    Enabled = false,
+    Connection = nil,
+    LastCheckTime = 0,
+    LastKillTime = 0,
+    CheckCooldown = 0.1,
+    KillCooldown = 0.05
+}
+
+function ToggleRebel(enabled)
+    Rebel.Enabled = enabled
+    if Rebel.Connection then
+        Rebel.Connection:Disconnect()
+        Rebel.Connection = nil
     end
-    return false
+    if enabled then
+        Rebel.Connection = RunService.Heartbeat:Connect(function()
+            if not Rebel.Enabled then return end
+            local currentTime = tick()
+            if currentTime - Rebel.LastCheckTime < Rebel.CheckCooldown then return end
+            Rebel.LastCheckTime = currentTime
+            
+            local enemyNames = {}
+            if workspace:FindFirstChild("Live") then
+                for _, enemy in pairs(workspace.Live:GetChildren()) do
+                    if enemy:IsA("Model") and enemy:FindFirstChild("Enemy") and not enemy:FindFirstChild("Dead") then
+                        local isPlayer = false
+                        for _, player in pairs(game:GetService("Players"):GetPlayers()) do
+                            if player.Name == enemy.Name then
+                                isPlayer = true
+                                break
+                            end
+                        end
+                        if not isPlayer then
+                            table.insert(enemyNames, enemy.Name)
+                        end
+                    end
+                end
+            end
+            
+            if #enemyNames == 0 then return end
+            
+            for _, enemyName in pairs(enemyNames) do
+                if currentTime - Rebel.LastKillTime < Rebel.KillCooldown then
+                    task.wait(Rebel.KillCooldown - (currentTime - Rebel.LastKillTime))
+                end
+                
+                local character = game:GetService("Players").LocalPlayer.Character
+                local backpack = game:GetService("Players").LocalPlayer.Backpack
+                local gun = nil
+                
+                if character then
+                    for _, tool in pairs(character:GetChildren()) do
+                        if tool:IsA("Tool") and tool:GetAttribute("Gun") then
+                            gun = tool
+                            break
+                        end
+                    end
+                end
+                
+                if not gun and backpack then
+                    for _, tool in pairs(backpack:GetChildren()) do
+                        if tool:IsA("Tool") and tool:GetAttribute("Gun") then
+                            gun = tool
+                            break
+                        end
+                    end
+                end
+                
+                if gun then
+                    local args = {
+                        gun,
+                        {
+                            ClientRayNormal = Vector3.new(-1.1920928955078125e-7, 1.0000001192092896, 0),
+                            FiredGun = true,
+                            SecondaryHitTargets = {},
+                            ClientRayInstance = workspace:WaitForChild("StairWalkWay"):WaitForChild("Part"),
+                            ClientRayPosition = Vector3.new(-220.17489624023438, 183.2957763671875, 301.07257080078125),
+                            bulletCF = CFrame.new(-220.5039825439453, 185.22506713867188, 302.133544921875, 0.9551116228103638, 0.2567310333251953, -0.14782091975212097, 7.450581485102248e-9, 0.4989798665046692, 0.8666135668754578, 0.2962462604045868, -0.8277127146720886, 0.4765814542770386),
+                            HitTargets = {
+                                [enemyName] = "Head"
+                            },
+                            bulletSizeC = Vector3.new(0.009999999776482582, 0.009999999776482582, 4.452499866485596),
+                            NoMuzzleFX = false,
+                            FirePosition = Vector3.new(-72.88850402832031, -679.4803466796875, -173.31005859375)
+                        }
+                    }
+                    
+                    pcall(function()
+                        game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("FiredGunClient"):FireServer(unpack(args))
+                    end)
+                    
+                    Rebel.LastKillTime = tick()
+                    task.wait(0.05)
+                end
+            end
+        end)
+        Notify("Rebel", "Equip ur gun", 2)
+    else
+        Rebel.LastKillTime = 0
+        Rebel.LastCheckTime = 0
+        Notify("Rebel", "Disabled", 2)
+    end
 end
 
 local function IsMobile()
@@ -87,12 +229,25 @@ local function DisableToggle(toggleName)
     end
 end
 
-local function CanEnableToggle(gameName, toggleName)
+local function CanEnableToggle(gameName, toggleName, toggleRef)
     if not IsGameActive(gameName) then
         Notify(toggleName, "Wait for " .. gameName .. "!", 2)
         PlayBell()
+        if toggleRef and toggleRef.SetValue then
+            pcall(function() toggleRef:SetValue(false) end)
+        end
         return false
     end
+    
+    if not IsFeatureSupported(toggleName) then
+        Notify(toggleName, "Not supported in your executor", 3)
+        PlayBell()
+        if toggleRef and toggleRef.SetValue then
+            pcall(function() toggleRef:SetValue(false) end)
+        end
+        return false
+    end
+    
     return true
 end
 
@@ -383,12 +538,10 @@ local function setupHeartbeatProcessing()
 end
 
 function ToggleAutoDodge(enabled)
+    local toggleRef = ToggleRefs.AutoDodge
+    
     if enabled then
-        if IsXenoExecutor() then
-            Notify("HollyScriptX [BETA]", "This Feature cannot be enabled in your executor :c", 5)
-            return false
-        end
-        if not CanEnableToggle("HideAndSeek", "Auto Dodge") then
+        if not CanEnableToggle("HideAndSeek", "Auto Dodge", toggleRef) then
             return false
         end
     end
@@ -419,111 +572,6 @@ function ToggleAutoDodge(enabled)
     return true
 end
 
-local Rebel = {
-    Enabled = false,
-    Connection = nil,
-    LastCheckTime = 0,
-    LastKillTime = 0,
-    CheckCooldown = 0.1,
-    KillCooldown = 0.05
-}
-
-function ToggleRebel(enabled)
-    Rebel.Enabled = enabled
-    if Rebel.Connection then
-        Rebel.Connection:Disconnect()
-        Rebel.Connection = nil
-    end
-    if enabled then
-        Rebel.Connection = RunService.Heartbeat:Connect(function()
-            if not Rebel.Enabled then return end
-            local currentTime = tick()
-            if currentTime - Rebel.LastCheckTime < Rebel.CheckCooldown then return end
-            Rebel.LastCheckTime = currentTime
-            
-            local enemyNames = {}
-            if workspace:FindFirstChild("Live") then
-                for _, enemy in pairs(workspace.Live:GetChildren()) do
-                    if enemy:IsA("Model") and enemy:FindFirstChild("Enemy") and not enemy:FindFirstChild("Dead") then
-                        local isPlayer = false
-                        for _, player in pairs(game:GetService("Players"):GetPlayers()) do
-                            if player.Name == enemy.Name then
-                                isPlayer = true
-                                break
-                            end
-                        end
-                        if not isPlayer then
-                            table.insert(enemyNames, enemy.Name)
-                        end
-                    end
-                end
-            end
-            
-            if #enemyNames == 0 then return end
-            
-            for _, enemyName in pairs(enemyNames) do
-                if currentTime - Rebel.LastKillTime < Rebel.KillCooldown then
-                    task.wait(Rebel.KillCooldown - (currentTime - Rebel.LastKillTime))
-                end
-                
-                local character = game:GetService("Players").LocalPlayer.Character
-                local backpack = game:GetService("Players").LocalPlayer.Backpack
-                local gun = nil
-                
-                if character then
-                    for _, tool in pairs(character:GetChildren()) do
-                        if tool:IsA("Tool") and tool:GetAttribute("Gun") then
-                            gun = tool
-                            break
-                        end
-                    end
-                end
-                
-                if not gun and backpack then
-                    for _, tool in pairs(backpack:GetChildren()) do
-                        if tool:IsA("Tool") and tool:GetAttribute("Gun") then
-                            gun = tool
-                            break
-                        end
-                    end
-                end
-                
-                if gun then
-                    local args = {
-                        gun,
-                        {
-                            ClientRayNormal = Vector3.new(-1.1920928955078125e-7, 1.0000001192092896, 0),
-                            FiredGun = true,
-                            SecondaryHitTargets = {},
-                            ClientRayInstance = workspace:WaitForChild("StairWalkWay"):WaitForChild("Part"),
-                            ClientRayPosition = Vector3.new(-220.17489624023438, 183.2957763671875, 301.07257080078125),
-                            bulletCF = CFrame.new(-220.5039825439453, 185.22506713867188, 302.133544921875, 0.9551116228103638, 0.2567310333251953, -0.14782091975212097, 7.450581485102248e-9, 0.4989798665046692, 0.8666135668754578, 0.2962462604045868, -0.8277127146720886, 0.4765814542770386),
-                            HitTargets = {
-                                [enemyName] = "Head"
-                            },
-                            bulletSizeC = Vector3.new(0.009999999776482582, 0.009999999776482582, 4.452499866485596),
-                            NoMuzzleFX = false,
-                            FirePosition = Vector3.new(-72.88850402832031, -679.4803466796875, -173.31005859375)
-                        }
-                    }
-                    
-                    pcall(function()
-                        game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("FiredGunClient"):FireServer(unpack(args))
-                    end)
-                    
-                    Rebel.LastKillTime = tick()
-                    task.wait(0.05)
-                end
-            end
-        end)
-        Notify("Rebel", "Instant Rebel Enabled", 2)
-    else
-        Rebel.LastKillTime = 0
-        Rebel.LastCheckTime = 0
-        Notify("Rebel", "Instant Rebel Disabled", 2)
-    end
-end
-
 local FreeGuardSettings = {
     Enabled = false,
     MaxCycles = 5,
@@ -531,9 +579,16 @@ local FreeGuardSettings = {
 }
 
 function ToggleFreeGuard(enabled)
-    if enabled and IsXenoExecutor() then
-        Notify("HollyScriptX [BETA]", "This Feature cannot be enabled in your executor :c", 5)
-        return false
+    local toggleRef = ToggleRefs.FreeGuard
+    
+    if enabled then
+        if IsXenoExecutor() then
+            Notify("Free Guard", "Not supported in your executor", 5)
+            if toggleRef and toggleRef.SetValue then
+                pcall(function() toggleRef:SetValue(false) end)
+            end
+            return false
+        end
     end
     
     FreeGuardSettings.Enabled = enabled
@@ -939,6 +994,9 @@ function ToggleFreeGuard(enabled)
             task.wait(2)
             
             FreeGuardSettings.Enabled = false
+            if toggleRef and toggleRef.SetValue then
+                pcall(function() toggleRef:SetValue(false) end)
+            end
         end
         
         spawn(executeAllCyclesInstantly)
@@ -1024,10 +1082,18 @@ end
 
 local AutoQTEEnabled = false
 function ToggleAutoQTE(enabled)
-    if enabled and IsXenoExecutor() then
-        Notify("HollyScriptX [BETA]", "This Feature cannot be enabled in your executor :c", 5)
-        return false
+    local toggleRef = ToggleRefs.AutoQTE
+    
+    if enabled then
+        if IsXenoExecutor() then
+            Notify("Auto QTE", "Not supported in your executor", 5)
+            if toggleRef and toggleRef.SetValue then
+                pcall(function() toggleRef:SetValue(false) end)
+            end
+            return false
+        end
     end
+    
     AutoQTEEnabled = enabled
     if enabled then
         local ImpactFrames = LocalPlayer.PlayerGui:FindFirstChild("ImpactFrames")
@@ -1233,10 +1299,6 @@ end
 
 local FreeDashEnabled = false
 function ToggleFreeDash(enabled)
-    if enabled and IsXenoExecutor() then
-        Notify("HollyScriptX [BETA]", "This Feature cannot be enabled in your executor :c", 5)
-        return false
-    end
     FreeDashEnabled = enabled
     if enabled then
         pcall(function()
@@ -1402,11 +1464,14 @@ end
 
 local JumpRopeAntiFall = {Enabled=false, Platform=nil, Conn=nil}
 function ToggleJumpRopeAntiFall(enabled)
+    local toggleRef = ToggleRefs.JumpRopeAntiFall
+    
     if enabled then
-        if not CanEnableToggle("JumpRope", "Anti Fall") then
+        if not CanEnableToggle("JumpRope", "Anti Fall", toggleRef) then
             return false
         end
     end
+    
     if JumpRopeAntiFall.Conn then JumpRopeAntiFall.Conn:Disconnect() end
     if JumpRopeAntiFall.Platform then JumpRopeAntiFall.Platform:Destroy() end
     JumpRopeAntiFall.Enabled = enabled
@@ -1457,11 +1522,14 @@ end
 
 local GlassESPEnabled = false
 function ToggleGlassESP(enabled)
+    local toggleRef = ToggleRefs.GlassESP
+    
     if enabled then
-        if not CanEnableToggle("GlassBridge", "Glass ESP") then
+        if not CanEnableToggle("GlassBridge", "Glass ESP", toggleRef) then
             return false
         end
     end
+    
     GlassESPEnabled = enabled
     if enabled then
         local function update()
@@ -1507,11 +1575,14 @@ end
 
 local AntiBreakEnabled = false; local AntiBreakConn = nil; local SafetyPlatforms = {}
 function ToggleAntiBreak(enabled)
+    local toggleRef = ToggleRefs.AntiBreak
+    
     if enabled then
-        if not CanEnableToggle("GlassBridge", "Anti Break") then
+        if not CanEnableToggle("GlassBridge", "Anti Break", toggleRef) then
             return false
         end
     end
+    
     if AntiBreakConn then AntiBreakConn:Disconnect(); AntiBreakConn = nil end
     for _,p in pairs(SafetyPlatforms) do if p then p:Destroy() end end
     SafetyPlatforms = {}
@@ -1582,11 +1653,14 @@ end
 
 local InfStaminaActive = false; local StaminaConns = {}
 function ToggleInfiniteStamina(enabled)
+    local toggleRef = ToggleRefs.InfiniteStamina
+    
     if enabled then
-        if not CanEnableToggle("HideAndSeek", "Infinite Stamina") then
+        if not CanEnableToggle("HideAndSeek", "Infinite Stamina", toggleRef) then
             return false
         end
     end
+    
     if enabled then
         if InfStaminaActive then return end
         InfStaminaActive = true
@@ -1661,11 +1735,14 @@ end
 local SpikesKill = {Enabled=false, SpikesPos=nil, Platform=nil, Conn=nil, CharConn=nil}
 local SpikeAnimIds = {"rbxassetid://105341857343164","rbxassetid://95623680038308","rbxassetid://106191977814264","rbxassetid://118039465583394"}
 function ToggleSpikesKill(enabled)
+    local toggleRef = ToggleRefs.SpikesKill
+    
     if enabled then
-        if not CanEnableToggle("HideAndSeek", "Spikes Kill") then
+        if not CanEnableToggle("HideAndSeek", "Spikes Kill", toggleRef) then
             return false
         end
     end
+    
     if SpikesKill.Conn then SpikesKill.Conn:Disconnect() end
     if SpikesKill.CharConn then SpikesKill.CharConn:Disconnect() end
     if SpikesKill.Platform then SpikesKill.Platform:Destroy() end
@@ -1726,11 +1803,14 @@ end
 
 local AutoGonggiEnabled = false
 function ToggleAutoGonggi(enabled)
+    local toggleRef = ToggleRefs.AutoGonggi
+    
     if enabled then
-        if not CanEnableToggle("Pentathlon", "Auto Gonggi") then
+        if not CanEnableToggle("Pentathlon", "Auto Gonggi", toggleRef) then
             return false
         end
     end
+    
     AutoGonggiEnabled = enabled
     if enabled then
         task.spawn(function()
@@ -1892,11 +1972,14 @@ local ZoneKillEnabled = false; local ZoneKillConn = nil; local ZoneKillCharConn 
 local ZoneAnimId = "rbxassetid://105341857343164"
 local ZonePos = Vector3.new(197.7,54.6,-96.3)
 function ToggleZoneKill(enabled)
+    local toggleRef = ToggleRefs.ZoneKill
+    
     if enabled then
-        if not CanEnableToggle("LastDinner", "Zone Kill") then
+        if not CanEnableToggle("LastDinner", "Zone Kill", toggleRef) then
             return false
         end
     end
+    
     if ZoneKillConn then ZoneKillConn:Disconnect() end
     if ZoneKillCharConn then ZoneKillCharConn:Disconnect() end
     ZoneKillEnabled = enabled
@@ -1928,11 +2011,14 @@ local VoidKillEnabled = false; local VoidKillConn = nil; local VoidKillCharConn 
 local VoidAnimIds = {"rbxassetid://107989020363293","rbxassetid://71619354165195"}
 local VoidZonePos = Vector3.new(-95.1,964.6,67.6)
 function ToggleVoidKill(enabled)
+    local toggleRef = ToggleRefs.VoidKill
+    
     if enabled then
-        if not CanEnableToggle("SkySquidGame", "Void Kill") then
+        if not CanEnableToggle("SkySquidGame", "Void Kill", toggleRef) then
             return false
         end
     end
+    
     if VoidKillConn then VoidKillConn:Disconnect() end
     if VoidKillCharConn then VoidKillCharConn:Disconnect() end
     VoidKillEnabled = enabled
@@ -1972,11 +2058,14 @@ end
 local MingleVoidKillEnabled = false; local MingleConns = {}
 local MingleAnimId = "rbxassetid://71318091779666"
 function ToggleMingleVoidKill(enabled)
+    local toggleRef = ToggleRefs.MingleVoidKill
+    
     if enabled then
-        if not CanEnableToggle("Mingle", "Void Kill") then
+        if not CanEnableToggle("Mingle", "Void Kill", toggleRef) then
             return false
         end
     end
+    
     for _,c in pairs(MingleConns) do pcall(function() c:Disconnect() end) end
     MingleConns = {}
     MingleVoidKillEnabled = enabled
@@ -2024,11 +2113,14 @@ end
 
 local SkySquidAntiFall = {Enabled=false, Platform=nil, Conn=nil}
 function ToggleSkySquidAntiFall(enabled)
+    local toggleRef = ToggleRefs.SkySquidAntiFall
+    
     if enabled then
-        if not CanEnableToggle("SkySquidGame", "Anti Fall") then
+        if not CanEnableToggle("SkySquidGame", "Anti Fall", toggleRef) then
             return false
         end
     end
+    
     if SkySquidAntiFall.Conn then SkySquidAntiFall.Conn:Disconnect() end
     if SkySquidAntiFall.Platform then SkySquidAntiFall.Platform:Destroy() end
     SkySquidAntiFall.Enabled = enabled
@@ -2258,11 +2350,14 @@ end
 
 local GodModeEnabled = false; local GodModeConn = nil; local GodModeOrigY = nil
 function ToggleGodMode(enabled)
+    local toggleRef = ToggleRefs.GodMode
+    
     if enabled then
-        if not CanEnableToggle("RedLightGreenLight", "God Mode") then
+        if not CanEnableToggle("RedLightGreenLight", "God Mode", toggleRef) then
             return false
         end
     end
+    
     if enabled then
         if GodModeConn then GodModeConn:Disconnect(); GodModeConn = nil end
         GodModeEnabled = true
@@ -2401,12 +2496,20 @@ local function rakhook(packet)
 end
 
 local function ToggleDesync(enabled)
+    local toggleRef = ToggleRefs.Desync
+    
     if enabled and IsXenoExecutor() then
-        Notify("HollyScriptX [BETA]", "This Feature cannot be enabled in your executor :c", 5)
+        Notify("Desync", "Not supported in your executor", 5)
+        if toggleRef and toggleRef.SetValue then
+            pcall(function() toggleRef:SetValue(false) end)
+        end
         return false
     end
     if not desyncAvailable then
-        Notify("Desync", "Unsupported Executor :c", 3)
+        Notify("Desync", "Unsupported Executor", 3)
+        if toggleRef and toggleRef.SetValue then
+            pcall(function() toggleRef:SetValue(false) end)
+        end
         return false
     end
     if enabled then
@@ -2545,6 +2648,7 @@ function TogglePlayerAttach(enabled)
             Notify("Player Attach","No players near",2)
             PlayBell()
             PlayerAttachEnabled = false
+            if ToggleRefs.PlayerAttach then ToggleRefs.PlayerAttach:SetValue(false) end
         end
     else
         detach()
@@ -2571,6 +2675,70 @@ local function teleportToNearest()
     else
         Notify("Teleport", "No players near", 2)
         PlayBell()
+    end
+end
+
+local function UpdateAllTogglesByGame()
+    local values = Workspace:FindFirstChild("Values")
+    if not values then return end
+    local currentGame = values:FindFirstChild("CurrentGame")
+    local gameName = currentGame and currentGame.Value
+    
+    UpdateToggleAvailability("AutoDodge", gameName == "HideAndSeek" and "HideAndSeek" or nil, ToggleRefs.AutoDodge)
+    UpdateToggleAvailability("InfiniteStamina", gameName == "HideAndSeek" and "HideAndSeek" or nil, ToggleRefs.InfiniteStamina)
+    UpdateToggleAvailability("SpikesKill", gameName == "HideAndSeek" and "HideAndSeek" or nil, ToggleRefs.SpikesKill)
+    UpdateToggleAvailability("JumpRopeAntiFall", gameName == "JumpRope" and "JumpRope" or nil, ToggleRefs.JumpRopeAntiFall)
+    UpdateToggleAvailability("GlassESP", gameName == "GlassBridge" and "GlassBridge" or nil, ToggleRefs.GlassESP)
+    UpdateToggleAvailability("AntiBreak", gameName == "GlassBridge" and "GlassBridge" or nil, ToggleRefs.AntiBreak)
+    UpdateToggleAvailability("AutoGonggi", gameName == "Pentathlon" and "Pentathlon" or nil, ToggleRefs.AutoGonggi)
+    UpdateToggleAvailability("ZoneKill", gameName == "LastDinner" and "LastDinner" or nil, ToggleRefs.ZoneKill)
+    UpdateToggleAvailability("VoidKill", gameName == "SkySquidGame" and "SkySquidGame" or nil, ToggleRefs.VoidKill)
+    UpdateToggleAvailability("SkySquidAntiFall", gameName == "SkySquidGame" and "SkySquidGame" or nil, ToggleRefs.SkySquidAntiFall)
+    UpdateToggleAvailability("MingleVoidKill", gameName == "Mingle" and "Mingle" or nil, ToggleRefs.MingleVoidKill)
+    UpdateToggleAvailability("GodMode", gameName == "RedLightGreenLight" and "RedLightGreenLight" or nil, ToggleRefs.GodMode)
+end
+
+local GameStateMonitor = {
+    Connection = nil,
+    LastGame = nil
+}
+
+function GameStateMonitor:Start()
+    if self.Connection then self.Connection:Disconnect() end
+    
+    self.Connection = RunService.Heartbeat:Connect(function()
+        local values = Workspace:FindFirstChild("Values")
+        if not values then return end
+        local currentGame = values:FindFirstChild("CurrentGame")
+        local gameName = currentGame and currentGame.Value
+        
+        if gameName ~= self.LastGame then
+            if self.LastGame then
+                self:DisableGameToggles(self.LastGame)
+            end
+            self.LastGame = gameName
+            UpdateAllTogglesByGame()
+        end
+    end)
+end
+
+function GameStateMonitor:DisableGameToggles(gameName)
+    local toggles = {
+        HideAndSeek = {"AutoDodge", "InfiniteStamina", "SpikesKill"},
+        JumpRope = {"JumpRopeAntiFall"},
+        GlassBridge = {"GlassESP", "AntiBreak"},
+        Pentathlon = {"AutoGonggi"},
+        LastDinner = {"ZoneKill"},
+        SkySquidGame = {"VoidKill", "SkySquidAntiFall"},
+        Mingle = {"MingleVoidKill"},
+        RedLightGreenLight = {"GodMode"}
+    }
+    
+    local gameToggles = toggles[gameName]
+    if gameToggles then
+        for _, toggleName in ipairs(gameToggles) do
+            DisableToggle(toggleName)
+        end
     end
 end
 
@@ -2704,50 +2872,6 @@ local function loadCursor()
     end)
 end
 
-local GameStateMonitor = {
-    Connection = nil,
-    LastGame = nil
-}
-
-function GameStateMonitor:Start()
-    if self.Connection then self.Connection:Disconnect() end
-    
-    self.Connection = RunService.Heartbeat:Connect(function()
-        local values = Workspace:FindFirstChild("Values")
-        if not values then return end
-        local currentGame = values:FindFirstChild("CurrentGame")
-        local gameName = currentGame and currentGame.Value
-        
-        if gameName ~= self.LastGame then
-            if self.LastGame then
-                self:DisableGameToggles(self.LastGame)
-            end
-            self.LastGame = gameName
-        end
-    end)
-end
-
-function GameStateMonitor:DisableGameToggles(gameName)
-    local toggles = {
-        HideAndSeek = {"AutoDodge", "InfiniteStamina", "SpikesKill"},
-        JumpRope = {"JumpRopeAntiFall"},
-        GlassBridge = {"GlassESP", "AntiBreak"},
-        Pentathlon = {"AutoGonggi"},
-        LastDinner = {"ZoneKill"},
-        SkySquidGame = {"VoidKill", "SkySquidAntiFall"},
-        Mingle = {"MingleVoidKill"},
-        RedLightGreenLight = {"GodMode"},
-        Rebel = {"AutoKillGuards"}
-    }
-    
-    local gameToggles = toggles[gameName]
-    if gameToggles then
-        for _, toggleName in ipairs(gameToggles) do
-            DisableToggle(toggleName)
-        end
-    end
-end
-
 GameStateMonitor:Start()
 
 local Window = Library:CreateWindow({
@@ -2757,11 +2881,12 @@ local Window = Library:CreateWindow({
     Center = true,
     AutoShow = true,
     ShowCustomCursor = false,
-    ShowToggleButton = true,
-    ToggleKeybind = nil
+    ToggleKeybind = Keybinds.Menu
 })
 
 guiCreated = true
+
+task.wait(1.3)
 
 for _, notif in ipairs(pendingNotifications) do
     Library:Notify({Title = notif.title, Description = notif.text, Duration = notif.duration})
@@ -2785,8 +2910,8 @@ end
 
 local MainTab = Window:AddTab("Main", "warehouse")
 local MainPlayer = MainTab:AddLeftGroupbox("Player", "user")
-local MainCombat = MainTab:AddLeftGroupbox("Combat Features", "sword")
-local MainExtras = MainTab:AddLeftGroupbox("Extra Features", "sparkles")
+local MainCombat = MainTab:AddLeftGroupbox("Combat", "sword")
+local MainExtras = MainTab:AddLeftGroupbox("Extras", "sparkles")
 local MainTeleports = MainTab:AddRightGroupbox("Teleports", "rocket")
 local MainEmotes = MainTab:AddRightGroupbox("Emotes", "music")
 
@@ -2795,7 +2920,7 @@ local GuardsLeft = GuardsTab:AddLeftGroupbox("Hitbox & Fire")
 local GuardsRight = GuardsTab:AddRightGroupbox("Ammo & Guard")
 
 local GamepassTab = Window:AddTab("GamePass", "crown")
-local GPGroup = GamepassTab:AddLeftGroupbox("Unlockers")
+local GPGroup = GamepassTab:AddLeftGroupbox("Free Gamepasses (NOT FE)")
 
 local GamesTab = Window:AddTab("Games", "gamepad")
 local RLGLGroup = GamesTab:AddLeftGroupbox("Red Light Green Light", "lightbulb")
@@ -2808,13 +2933,20 @@ local MingleGroup = GamesTab:AddLeftGroupbox("Mingle", "users")
 local DinnerGroup = GamesTab:AddRightGroupbox("Last Dinner", "utensils")
 local SquidLeft = GamesTab:AddLeftGroupbox("Sky Squid", "cloud")
 local RebelGroup = GamesTab:AddRightGroupbox("Rebel", "flag")
+ToggleRefs.AutoKillGuards = RebelGroup:AddToggle("AutoKillGuards", {Text="Auto Kill Guards", Default=false, Callback=ToggleRebel})
 
 local SettingsTab = Window:AddTab("Settings", "paintbrush")
 local SettingsLeft = SettingsTab:AddLeftGroupbox("Theme & UI")
 local KeybindsGroup = SettingsTab:AddRightGroupbox("Keybinds", "keyboard")
 
-ToggleRefs.SpeedHack = MainPlayer:AddToggle("SpeedHack", {Text="Speed Hack", Default=false, Callback=ToggleSpeedHack})
-MainPlayer:AddSlider("SpeedValue", {Text="Speed Value", Default=39, Min=16, Max=40, Callback=SetSpeedValue})
+if IsFeatureSupported("SpeedHack") then
+    ToggleRefs.SpeedHack = MainPlayer:AddToggle("SpeedHack", {Text="Speed Hack", Default=false, Callback=ToggleSpeedHack})
+    MainPlayer:AddSlider("SpeedValue", {Text="Speed Value", Default=39, Min=16, Max=40, Callback=SetSpeedValue})
+else
+    local speedToggle = MainPlayer:AddToggle("SpeedHack", {Text="Speed Hack (Unsupported)", Default=false, Callback=ToggleSpeedHack})
+    speedToggle:SetDisabled(true)
+end
+
 ToggleRefs.FOVChanger = MainPlayer:AddToggle("FOVChanger", {Text="FOV Changer", Default=false, Callback=ToggleFOV})
 MainPlayer:AddSlider("FOVValue", {Text="FOV Value", Default=120, Min=70, Max=120, Callback=SetFOV})
 ToggleRefs.Fullbright = MainPlayer:AddToggle("Fullbright", {Text="Fullbright", Default=false, Callback=ToggleFullbright})
@@ -2824,9 +2956,21 @@ ToggleRefs.Flight = MainPlayer:AddToggle("Flight", {Text="Flight", Default=false
 
 ToggleRefs.PlayerAttach = MainCombat:AddToggle("PlayerAttach", {Text="Player Attach", Default=false, Callback=TogglePlayerAttach})
 ToggleRefs.FaceTarget = MainCombat:AddToggle("FaceTarget", {Text="Face Target", Default=false, Callback=ToggleFaceTarget})
-ToggleRefs.Desync = MainCombat:AddToggle("Desync", {Text="Desync", Default=false, Callback=ToggleDesync})
 
-ToggleRefs.AutoQTE = MainExtras:AddToggle("AutoQTE", {Text="Auto QTE", Default=false, Callback=ToggleAutoQTE})
+if IsFeatureSupported("Desync") then
+    ToggleRefs.Desync = MainCombat:AddToggle("Desync", {Text="Desync", Default=false, Callback=ToggleDesync})
+else
+    local desyncToggle = MainCombat:AddToggle("Desync", {Text="Desync (Unsupported)", Default=false, Callback=ToggleDesync})
+    desyncToggle:SetDisabled(true)
+end
+
+if IsFeatureSupported("AutoQTE") then
+    ToggleRefs.AutoQTE = MainExtras:AddToggle("AutoQTE", {Text="Auto QTE", Default=false, Callback=ToggleAutoQTE})
+else
+    local qteToggle = MainExtras:AddToggle("AutoQTE", {Text="Auto QTE (Unsupported)", Default=false, Callback=ToggleAutoQTE})
+    qteToggle:SetDisabled(true)
+end
+
 ToggleRefs.FreeDash = MainExtras:AddToggle("FreeDash", {Text="Free Dash", Default=false, Callback=ToggleFreeDash})
 ToggleRefs.Noclip = MainExtras:AddToggle("Noclip", {Text="TP Through Walls", Default=false, Callback=function(state) 
     noclipEnabled = state
@@ -2878,7 +3022,13 @@ ToggleRefs.HitboxExpander = GuardsLeft:AddToggle("HitboxExpander", {Text="Hitbox
 GuardsLeft:AddSlider("HitboxSize", {Text="Hitbox Size", Default=50, Min=10, Max=999, Callback=SetHitboxSize})
 ToggleRefs.RapidFire = GuardsLeft:AddToggle("RapidFire", {Text="Rapid Fire", Default=false, Callback=ToggleRapidFire})
 ToggleRefs.InfiniteAmmo = GuardsRight:AddToggle("InfiniteAmmo", {Text="Infinite Ammo", Default=false, Callback=ToggleInfiniteAmmo})
-ToggleRefs.FreeGuard = GuardsRight:AddToggle("FreeGuard", {Text="Free Guard", Default=false, Callback=ToggleFreeGuard})
+
+if IsFeatureSupported("FreeGuard") then
+    ToggleRefs.FreeGuard = GuardsRight:AddToggle("FreeGuard", {Text="Free Guard", Default=false, Callback=ToggleFreeGuard})
+else
+    local freeGuardToggle = GuardsRight:AddToggle("FreeGuard", {Text="Free Guard (Unsupported)", Default=false, Callback=ToggleFreeGuard})
+    freeGuardToggle:SetDisabled(true)
+end
 
 ToggleRefs.PermanentGuard = GPGroup:AddToggle("PermanentGuard", {Text="Permanent Guard", Default=false, Callback=TogglePermanentGuard})
 ToggleRefs.GlassVision = GPGroup:AddToggle("GlassVision", {Text="Glass Vision", Default=false, Callback=ToggleGlassVision})
@@ -2892,12 +3042,35 @@ ToggleRefs.GodMode = RLGLGroup:AddToggle("GodMode", {Text="God Mode", Default=fa
 
 DalgonaGroup:AddButton("Get Lighter", Dalgona_Lighter)
 
-ToggleRefs.AutoGonggi = PentathlonGroup:AddToggle("AutoGonggi", {Text="Auto Gonggi", Default=false, Callback=ToggleAutoGonggi})
+if IsFeatureSupported("AutoGonggi") then
+    ToggleRefs.AutoGonggi = PentathlonGroup:AddToggle("AutoGonggi", {Text="Auto Gonggi", Default=false, Callback=ToggleAutoGonggi})
+else
+    local gonggiToggle = PentathlonGroup:AddToggle("AutoGonggi", {Text="Auto Gonggi (Unsupported)", Default=false, Callback=ToggleAutoGonggi})
+    gonggiToggle:SetDisabled(true)
+end
 
-ToggleRefs.InfiniteStamina = HNSLeft:AddToggle("InfiniteStamina", {Text="Infinite Stamina", Default=false, Callback=ToggleInfiniteStamina})
-ToggleRefs.SpikesKill = HNSLeft:AddToggle("SpikesKill", {Text="Spikes Kill", Default=false, Callback=ToggleSpikesKill})
+if IsFeatureSupported("InfiniteStamina") then
+    ToggleRefs.InfiniteStamina = HNSLeft:AddToggle("InfiniteStamina", {Text="Infinite Stamina", Default=false, Callback=ToggleInfiniteStamina})
+else
+    local staminaToggle = HNSLeft:AddToggle("InfiniteStamina", {Text="Infinite Stamina (Unsupported)", Default=false, Callback=ToggleInfiniteStamina})
+    staminaToggle:SetDisabled(true)
+end
+
+if IsFeatureSupported("SpikesKill") then
+    ToggleRefs.SpikesKill = HNSLeft:AddToggle("SpikesKill", {Text="Spikes Kill", Default=false, Callback=ToggleSpikesKill})
+else
+    local spikesToggle = HNSLeft:AddToggle("SpikesKill", {Text="Spikes Kill (Unsupported)", Default=false, Callback=ToggleSpikesKill})
+    spikesToggle:SetDisabled(true)
+end
+
 HNSLeft:AddButton("Teleport to Hider", TeleportToHider)
-ToggleRefs.AutoDodge = HNSLeft:AddToggle("AutoDodge", {Text="Auto Dodge", Default=false, Callback=ToggleAutoDodge})
+
+if IsFeatureSupported("AutoDodge") then
+    ToggleRefs.AutoDodge = HNSLeft:AddToggle("AutoDodge", {Text="Auto Dodge", Default=false, Callback=ToggleAutoDodge})
+else
+    local dodgeToggle = HNSLeft:AddToggle("AutoDodge", {Text="Auto Dodge (Unsupported)", Default=false, Callback=ToggleAutoDodge})
+    dodgeToggle:SetDisabled(true)
+end
 
 ToggleRefs.JumpRopeAntiFall = JumpLeft:AddToggle("AntiFall", {Text="Anti Fall", Default=false, Callback=ToggleJumpRopeAntiFall})
 JumpLeft:AddButton("Remove Rope", JR_DeleteRope)
@@ -2909,13 +3082,9 @@ GlassLeft:AddButton("Teleport to End", GB_TP_End)
 ToggleRefs.GlassESP = GlassLeft:AddToggle("GlassESP", {Text="Glass ESP", Default=false, Callback=ToggleGlassESP})
 
 ToggleRefs.MingleVoidKill = MingleGroup:AddToggle("VoidKill", {Text="Void Kill", Default=false, Callback=ToggleMingleVoidKill})
-
 ToggleRefs.ZoneKill = DinnerGroup:AddToggle("ZoneKill", {Text="Zone Kill", Default=false, Callback=ToggleZoneKill})
-
 ToggleRefs.SkySquidAntiFall = SquidLeft:AddToggle("AntiFall", {Text="Anti Fall", Default=false, Callback=ToggleSkySquidAntiFall})
 ToggleRefs.VoidKill = SquidLeft:AddToggle("VoidKill", {Text="Void Kill", Default=false, Callback=ToggleVoidKill})
-
-ToggleRefs.AutoKillGuards = RebelGroup:AddToggle("AutoKillGuards", {Text="Auto Kill Guards", Default=false, Callback=ToggleRebel})
 
 SettingsLeft:AddDropdown("DPIDropdown", {
     Callback = function(Value)
@@ -2954,15 +3123,17 @@ KeybindsGroup:AddLabel("Face Target"):AddKeyPicker("FaceTargetBind", {
     end
 })
 
-KeybindsGroup:AddLabel("Desync"):AddKeyPicker("DesyncBind", {
-    Default = "U",
-    Text = "Desync",
-    Mode = "Toggle",
-    Callback = function(Value)
-        ToggleDesync(Value)
-        if ToggleRefs.Desync then ToggleRefs.Desync:SetValue(Value) end
-    end
-})
+if IsFeatureSupported("Desync") then
+    KeybindsGroup:AddLabel("Desync"):AddKeyPicker("DesyncBind", {
+        Default = "U",
+        Text = "Desync",
+        Mode = "Toggle",
+        Callback = function(Value)
+            ToggleDesync(Value)
+            if ToggleRefs.Desync then ToggleRefs.Desync:SetValue(Value) end
+        end
+    })
+end
 
 KeybindsGroup:AddLabel("Player Attach"):AddKeyPicker("AttachBind", {
     Default = "V",
@@ -2984,6 +3155,44 @@ KeybindsGroup:AddLabel("Teleport Nearest"):AddKeyPicker("TPNearestBind", {
 })
 
 SettingsLeft:AddButton("Unload Script", function()
+    local function cleanupKeyPickers()
+        local keyPickers = {
+            "FlightBind", "FaceTargetBind", "DesyncBind", "AttachBind", "TPNearestBind", "MenuBind"
+        }
+        
+        for _, name in ipairs(keyPickers) do
+            local picker = Library.Options[name]
+            if picker and picker.Destroy then
+                pcall(function() picker:Destroy() end)
+            end
+        end
+        
+        if Library.KeybindToggles then
+            for _, toggle in pairs(Library.KeybindToggles) do
+                if toggle and toggle.Holder then
+                    pcall(function() toggle.Holder:Destroy() end)
+                end
+            end
+            Library.KeybindToggles = {}
+        end
+        
+        if Library.KeybindFrame then
+            pcall(function() Library.KeybindFrame:Destroy() end)
+            Library.KeybindFrame = nil
+            Library.KeybindContainer = nil
+        end
+    end
+    
+    cleanupKeyPickers()
+    
+    if desyncHooked then
+        pcall(function()
+            if raknet and raknet.remove_send_hook then
+                raknet.remove_send_hook(rakhook)
+            end
+        end)
+        desyncHooked = false
+    end
     for name, toggle in pairs(ToggleRefs) do
         if toggle and toggle.SetValue then
             pcall(function() toggle:SetValue(false) end)
@@ -3025,8 +3234,57 @@ SettingsLeft:AddButton("Unload Script", function()
     ToggleZoneKill(false)
     ToggleSkySquidAntiFall(false)
     ToggleVoidKill(false)
-    ToggleRebel(false)
     ToggleInstantInteract(false)
+    ToggleRebel(false)
+    
+    if Rebel and Rebel.Connection then
+        Rebel.Connection:Disconnect()
+    end
+    
+    if AutoDodge and AutoDodge.Connections then
+        for _, conn in pairs(AutoDodge.Connections) do
+            pcall(function() conn:Disconnect() end)
+        end
+    end
+    
+    if GameStateMonitor and GameStateMonitor.Connection then
+        GameStateMonitor.Connection:Disconnect()
+    end
+    
+    if Fly and Fly.Connection then
+        Fly.Connection:Disconnect()
+    end
+    
+    if Fly and Fly.BodyVelocity then
+        Fly.BodyVelocity:Destroy()
+    end
+    
+    if FaceTargetModule and FaceTargetModule.Connection then
+        FaceTargetModule.Connection:Disconnect()
+    end
+    
+    if attachConnection then
+        attachConnection:Disconnect()
+    end
+    
+    if bodyPosition then bodyPosition:Destroy() end
+    if bodyVelocity then bodyVelocity:Destroy() end
+    
+    if AutoSafeConn then AutoSafeConn:Disconnect() end
+    if AutoNextConn then AutoNextConn:Disconnect() end
+    if InstInteractConn then InstInteractConn:Disconnect() end
+    if ZoneKillConn then ZoneKillConn:Disconnect() end
+    if VoidKillConn then VoidKillConn:Disconnect() end
+    if AntiBreakConn then AntiBreakConn:Disconnect() end
+    if GodModeConn then GodModeConn:Disconnect() end
+    
+    for _, conn in pairs(MingleConns) do
+        pcall(function() conn:Disconnect() end)
+    end
+    
+    for _, conn in pairs(StaminaConns) do
+        pcall(function() conn:Disconnect() end)
+    end
     
     stopEmote()
     detach()
@@ -3050,6 +3308,15 @@ SettingsLeft:AddButton("Unload Script", function()
         end
     end
     
+    local plrGui = LocalPlayer:FindFirstChild("PlayerGui")
+    if plrGui then
+        for _, obj in pairs(plrGui:GetChildren()) do
+            if obj:IsA("ScreenGui") and (obj.Name:find("HollyScriptX") or obj.Name:find("NoclipButton")) then
+                pcall(function() obj:Destroy() end)
+            end
+        end
+    end
+    
     if Window and Window.Destroy then
         pcall(function() Window:Destroy() end)
     end
@@ -3064,6 +3331,28 @@ end
 if SaveManager then
     SaveManager:BuildConfigSection(SettingsTab)
 end
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    local key = input.KeyCode
+    if key == Keybinds.Flight then
+        ToggleFly(not Fly.Enabled)
+        if ToggleRefs.Flight then ToggleRefs.Flight:SetValue(Fly.Enabled) end
+    elseif key == Keybinds.Noclip then
+        if noclipEnabled then teleportThroughWall() end
+    elseif key == Keybinds.Desync and IsFeatureSupported("Desync") then
+        ToggleDesync(not desyncHooked)
+        if ToggleRefs.Desync then ToggleRefs.Desync:SetValue(desyncHooked) end
+    elseif key == Keybinds.FaceTarget then
+        ToggleFaceTarget()
+        if ToggleRefs.FaceTarget then ToggleRefs.FaceTarget:SetValue(FaceTargetModule.Enabled) end
+    elseif key == Keybinds.PlayerAttach then
+        TogglePlayerAttach(not PlayerAttachEnabled)
+        if ToggleRefs.PlayerAttach then ToggleRefs.PlayerAttach:SetValue(PlayerAttachEnabled) end
+    elseif key == Keybinds.TeleportNearest then
+        teleportToNearest()
+    end
+end)
 
 task.defer(function()
     task.wait(0.5)
@@ -3080,34 +3369,16 @@ task.defer(function()
     end)
 end)
 
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if gameProcessed then return end
-    local key = input.KeyCode
-    if key == Keybinds.Flight then
-        ToggleFly(not Fly.Enabled)
-        if ToggleRefs.Flight then ToggleRefs.Flight:SetValue(Fly.Enabled) end
-    elseif key == Keybinds.Noclip then
-        if noclipEnabled then teleportThroughWall() end
-    elseif key == Keybinds.Desync then
-        ToggleDesync(not desyncHooked)
-        if ToggleRefs.Desync then ToggleRefs.Desync:SetValue(desyncHooked) end
-    elseif key == Keybinds.FaceTarget then
-        ToggleFaceTarget()
-        if ToggleRefs.FaceTarget then ToggleRefs.FaceTarget:SetValue(FaceTargetModule.Enabled) end
-    elseif key == Keybinds.PlayerAttach then
-        TogglePlayerAttach(not PlayerAttachEnabled)
-        if ToggleRefs.PlayerAttach then ToggleRefs.PlayerAttach:SetValue(PlayerAttachEnabled) end
-    elseif key == Keybinds.TeleportNearest then
-        teleportToNearest()
-    end
+task.defer(function()
+    task.wait(0.5)
+    UpdateAllTogglesByGame()
 end)
 
-loadCursor()
 PlayBell()
-
+loadCursor()
 
 if IsXenoExecutor() then
-    Notify("HollyScriptX [BETA]", "Your Executor can be broken. Use with risk!", 5)
+    Notify("HollyScriptX", "Your Executor can be broken. Use with risk!", 5)
 else
-    Notify("HollyScriptX [BETA]", "Success Loaded!", 11)
+    Notify("HollyScriptX", "Success Loaded!", 11)
 end
