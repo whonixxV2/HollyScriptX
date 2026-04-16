@@ -3128,190 +3128,269 @@ if IsXenoExecutor() then
 else
     Notify("HollyScriptX [BETA]", "Success Loaded!", 11)
 end
-local function fixToggleButton()
-    task.wait(2)
+-- Удалите старую функцию fixToggleButton и замените на это:
+
+task.spawn(function()
+    task.wait(3) -- ждём полную загрузку GUI
     
-    local function tryFix()
-        for _, gui in pairs(LocalPlayer.PlayerGui:GetChildren()) do
-            if gui:IsA("ScreenGui") then
-                for _, btn in pairs(gui:GetDescendants()) do
-                    if (btn:IsA("TextButton") or btn:IsA("ImageButton")) and 
-                       (btn.Name == "Toggle" or (btn:IsA("TextButton") and btn.Text == "Toggle")) then
-                        
-                        pcall(function()
-                            if getconnections then
-                                local connections = getconnections(btn.MouseButton1Click)
-                                for _, conn in pairs(connections) do
-                                    conn:Disconnect()
-                                end
-                            end
-                        end)
-                        
-                        btn.MouseButton1Click:Connect(function()
-                            if Library and Library.Toggle then
-                                Library:Toggle()
-                            elseif Window and Window.Toggle then
-                                Window:Toggle()
-                            else
-                                pcall(function()
-                                    Library:SetOpen(not Library.Open)
-                                end)
-                            end
-                        end)
-                        
-                        btn.InputBegan:Connect(function(input)
-                            if input.UserInputType == Enum.UserInputType.Touch then
-                                task.wait(0.05)
-                                if Library and Library.Toggle then
-                                    Library:Toggle()
-                                elseif Window and Window.Toggle then
-                                    Window:Toggle()
-                                else
-                                    pcall(function()
-                                        Library:SetOpen(not Library.Open)
-                                    end)
-                                end
-                            end
-                        end)
-                        
-                        print("[HollyScriptX] Toggle button fixed for mobile!")
-                        return true
+    -- Находим метод переключения окна
+    local function toggleWindow()
+        local success = false
+        
+        -- Способ 1: Library:Toggle()
+        pcall(function()
+            if Library.Toggle then
+                Library:Toggle()
+                success = true
+            end
+        end)
+        
+        if success then return end
+        
+        -- Способ 2: Window:Toggle()  
+        pcall(function()
+            if Window.Toggle then
+                Window:Toggle()
+                success = true
+            end
+        end)
+        
+        if success then return end
+        
+        -- Способ 3: Ищем главный фрейм и переключаем видимость
+        pcall(function()
+            for _, gui in pairs(CoreGui:GetChildren()) do
+                if gui:IsA("ScreenGui") then
+                    for _, child in pairs(gui:GetChildren()) do
+                        if child:IsA("Frame") and child.Name ~= "Toggle" then
+                            child.Visible = not child.Visible
+                            success = true
+                            return
+                        end
                     end
                 end
             end
-        end
+        end)
         
-        for _, gui in pairs(CoreGui:GetChildren()) do
-            if gui:IsA("ScreenGui") then
-                for _, btn in pairs(gui:GetDescendants()) do
-                    if (btn:IsA("TextButton") or btn:IsA("ImageButton")) and 
-                       (btn.Name == "Toggle" or (btn:IsA("TextButton") and btn.Text == "Toggle")) then
-                        
-                        pcall(function()
-                            if getconnections then
-                                local connections = getconnections(btn.MouseButton1Click)
-                                for _, conn in pairs(connections) do
-                                    conn:Disconnect()
-                                end
-                            end
-                        end)
-                        
-                        btn.MouseButton1Click:Connect(function()
-                            if Library and Library.Toggle then
-                                Library:Toggle()
-                            elseif Window and Window.Toggle then
-                                Window:Toggle()
-                            else
-                                pcall(function()
-                                    Library:SetOpen(not Library.Open)
-                                end)
-                            end
-                        end)
-                        
-                        btn.InputBegan:Connect(function(input)
-                            if input.UserInputType == Enum.UserInputType.Touch then
-                                task.wait(0.05)
-                                if Library and Library.Toggle then
-                                    Library:Toggle()
-                                elseif Window and Window.Toggle then
-                                    Window:Toggle()
-                                else
-                                    pcall(function()
-                                        Library:SetOpen(not Library.Open)
-                                    end)
-                                end
-                            end
-                        end)
-                        
-                        print("[HollyScriptX] Toggle button fixed in CoreGui!")
-                        return true
-                    end
-                end
-            end
-        end
+        if success then return end
         
-        return false
+        -- Способ 4: SetOpen
+        pcall(function()
+            Library:SetOpen(not Library.Open)
+        end)
     end
     
-    for i = 1, 5 do
-        if tryFix() then return true end
+    -- Ищем и фиксим существующую кнопку Toggle
+    local function findAndFixToggle()
+        local found = false
+        
+        -- Ищем в CoreGui
+        for _, gui in pairs(CoreGui:GetChildren()) do
+            if gui:IsA("ScreenGui") then
+                for _, desc in pairs(gui:GetDescendants()) do
+                    if desc:IsA("TextButton") or desc:IsA("ImageButton") then
+                        local isToggle = false
+                        if desc.Name == "Toggle" then isToggle = true end
+                        if desc:IsA("TextButton") and desc.Text == "Toggle" then isToggle = true end
+                        
+                        if isToggle then
+                            print("[HollyScriptX] Found toggle button in CoreGui: " .. desc:GetFullName())
+                            
+                            -- Убираем старые соединения
+                            pcall(function()
+                                if getconnections then
+                                    for _, conn in pairs(getconnections(desc.MouseButton1Click)) do
+                                        pcall(function() conn:Disconnect() end)
+                                    end
+                                    for _, conn in pairs(getconnections(desc.MouseButton1Down)) do
+                                        pcall(function() conn:Disconnect() end)
+                                    end
+                                    for _, conn in pairs(getconnections(desc.Activated)) do
+                                        pcall(function() conn:Disconnect() end)
+                                    end
+                                    for _, conn in pairs(getconnections(desc.InputBegan)) do
+                                        pcall(function() conn:Disconnect() end)
+                                    end
+                                end
+                            end)
+                            
+                            -- Новые соединения
+                            desc.MouseButton1Click:Connect(function()
+                                toggleWindow()
+                            end)
+                            
+                            desc.Activated:Connect(function()
+                                toggleWindow()
+                            end)
+                            
+                            desc.InputBegan:Connect(function(input)
+                                if input.UserInputType == Enum.UserInputType.Touch or 
+                                   input.UserInputType == Enum.UserInputType.MouseButton1 then
+                                    task.wait(0.05)
+                                    toggleWindow()
+                                end
+                            end)
+                            
+                            found = true
+                        end
+                    end
+                end
+            end
+        end
+        
+        -- Ищем в PlayerGui
+        for _, gui in pairs(LocalPlayer.PlayerGui:GetChildren()) do
+            if gui:IsA("ScreenGui") then
+                for _, desc in pairs(gui:GetDescendants()) do
+                    if desc:IsA("TextButton") or desc:IsA("ImageButton") then
+                        local isToggle = false
+                        if desc.Name == "Toggle" then isToggle = true end
+                        if desc:IsA("TextButton") and desc.Text == "Toggle" then isToggle = true end
+                        
+                        if isToggle then
+                            print("[HollyScriptX] Found toggle button in PlayerGui: " .. desc:GetFullName())
+                            
+                            pcall(function()
+                                if getconnections then
+                                    for _, conn in pairs(getconnections(desc.MouseButton1Click)) do
+                                        pcall(function() conn:Disconnect() end)
+                                    end
+                                    for _, conn in pairs(getconnections(desc.MouseButton1Down)) do
+                                        pcall(function() conn:Disconnect() end)
+                                    end
+                                    for _, conn in pairs(getconnections(desc.Activated)) do
+                                        pcall(function() conn:Disconnect() end)
+                                    end
+                                    for _, conn in pairs(getconnections(desc.InputBegan)) do
+                                        pcall(function() conn:Disconnect() end)
+                                    end
+                                end
+                            end)
+                            
+                            desc.MouseButton1Click:Connect(function()
+                                toggleWindow()
+                            end)
+                            
+                            desc.Activated:Connect(function()
+                                toggleWindow()
+                            end)
+                            
+                            desc.InputBegan:Connect(function(input)
+                                if input.UserInputType == Enum.UserInputType.Touch or 
+                                   input.UserInputType == Enum.UserInputType.MouseButton1 then
+                                    task.wait(0.05)
+                                    toggleWindow()
+                                end
+                            end)
+                            
+                            found = true
+                        end
+                    end
+                end
+            end
+        end
+        
+        return found
+    end
+    
+    -- Пробуем найти кнопку несколько раз
+    local fixed = false
+    for attempt = 1, 10 do
+        if findAndFixToggle() then
+            fixed = true
+            print("[HollyScriptX] Toggle button fixed on attempt " .. attempt)
+            break
+        end
+        print("[HollyScriptX] Toggle button not found, attempt " .. attempt)
         task.wait(1)
     end
     
+    -- Если на мобильном и кнопка не найдена/не работает — создаём свою
     if IsMobile() then
-        local screenGui = Instance.new("ScreenGui")
-        screenGui.Name = "HollyScriptX_MobileToggle"
-        screenGui.ResetOnSpawn = false
-        screenGui.DisplayOrder = 999
-        screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+        local mobileGui = Instance.new("ScreenGui")
+        mobileGui.Name = "HollyScriptX_MobileToggle"
+        mobileGui.ResetOnSpawn = false
+        mobileGui.DisplayOrder = 99999
+        
+        -- Пробуем CoreGui, если нет — PlayerGui
+        pcall(function() mobileGui.Parent = CoreGui end)
+        if not mobileGui.Parent then
+            mobileGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+        end
         
         local toggleBtn = Instance.new("TextButton")
-        toggleBtn.Name = "MobileToggle"
-        toggleBtn.Size = UDim2.new(0, 60, 0, 60)
-        toggleBtn.Position = UDim2.new(0, 10, 0.5, -30)
-        toggleBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-        toggleBtn.BackgroundTransparency = 0.3
-        toggleBtn.Text = "Toggle"
+        toggleBtn.Name = "MobileToggleBtn"
+        toggleBtn.Size = UDim2.new(0, 55, 0, 55)
+        toggleBtn.Position = UDim2.new(0, 15, 0.3, 0)
+        toggleBtn.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+        toggleBtn.BackgroundTransparency = 0.2
+        toggleBtn.Text = "H"
         toggleBtn.TextColor3 = Color3.new(1, 1, 1)
-        toggleBtn.TextSize = 28
+        toggleBtn.TextSize = 24
         toggleBtn.Font = Enum.Font.GothamBold
-        toggleBtn.Parent = screenGui
+        toggleBtn.ZIndex = 99999
+        toggleBtn.Parent = mobileGui
         
-        local corner = Instance.new("UICorner")
-        corner.CornerRadius = UDim.new(0, 12)
-        corner.Parent = toggleBtn
+        Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(1, 0)
         
-        local stroke = Instance.new("UIStroke")
+        local stroke = Instance.new("UIStroke", toggleBtn)
         stroke.Color = Color3.fromRGB(255, 255, 255)
-        stroke.Thickness = 1.5
-        stroke.Parent = toggleBtn
+        stroke.Thickness = 2
         
-        local dragging = false
-        local dragStart, startPos
+        -- Драг + тап система
+        local isDragging = false
+        local dragStartPos = nil
+        local btnStartPos = nil
+        local totalDragDist = 0
         
         toggleBtn.InputBegan:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.Touch then
-                dragging = true
-                dragStart = input.Position
-                startPos = toggleBtn.Position
+            if input.UserInputType == Enum.UserInputType.Touch or 
+               input.UserInputType == Enum.UserInputType.MouseButton1 then
+                isDragging = true
+                dragStartPos = input.Position
+                btnStartPos = toggleBtn.Position
+                totalDragDist = 0
             end
         end)
         
-        toggleBtn.InputChanged:Connect(function(input)
-            if dragging and input.UserInputType == Enum.UserInputType.Touch then
-                local delta = input.Position - dragStart
-                if delta.Magnitude > 10 then
-                    toggleBtn.Position = UDim2.new(
-                        startPos.X.Scale, startPos.X.Offset + delta.X,
-                        startPos.Y.Scale, startPos.Y.Offset + delta.Y
-                    )
+        UserInputService.InputChanged:Connect(function(input)
+            if isDragging and (input.UserInputType == Enum.UserInputType.Touch or 
+               input.UserInputType == Enum.UserInputType.MouseMovement) then
+                local delta = input.Position - dragStartPos
+                totalDragDist = delta.Magnitude
+                toggleBtn.Position = UDim2.new(
+                    btnStartPos.X.Scale, 
+                    btnStartPos.X.Offset + delta.X,
+                    btnStartPos.Y.Scale, 
+                    btnStartPos.Y.Offset + delta.Y
+                )
+            end
+        end)
+        
+        UserInputService.InputEnded:Connect(function(input)
+            if isDragging and (input.UserInputType == Enum.UserInputType.Touch or 
+               input.UserInputType == Enum.UserInputType.MouseButton1) then
+                isDragging = false
+                -- Если сдвинулся мало — это тап
+                if totalDragDist < 15 then
+                    toggleWindow()
                 end
             end
         end)
         
-        toggleBtn.InputEnded:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.Touch then
-                local delta = input.Position - dragStart
-                if delta.Magnitude <= 10 then
-                    if Library and Library.Toggle then
-                        Library:Toggle()
-                    elseif Window and Window.Toggle then
-                        Window:Toggle()
-                    else
-                        pcall(function()
-                            Library:SetOpen(not Library.Open)
-                        end)
-                    end
-                end
-                dragging = false
+        -- Радужная анимация обводки
+        task.spawn(function()
+            local t = 0
+            while mobileGui and mobileGui.Parent do
+                t = t + 0.02
+                local r = math.sin(t * 0.6) * 0.5 + 0.5
+                local g = math.sin(t * 0.6 + 2) * 0.5 + 0.5
+                local b = math.sin(t * 0.6 + 4) * 0.5 + 0.5
+                stroke.Color = Color3.new(r, g, b)
+                task.wait(0.03)
             end
         end)
         
-        print("[HollyScriptX] Created custom mobile toggle button!")
-        return true
+        print("[HollyScriptX] Created mobile toggle button!")
     end
-    
-    return false
-end
-
-task.spawn(fixToggleButton)
+end)
