@@ -2757,7 +2757,8 @@ local Window = Library:CreateWindow({
     Center = true,
     AutoShow = true,
     ShowCustomCursor = false,
-    ToggleKeybind = Keybinds.Menu
+    ShowToggleButton = true,
+    ToggleKeybind = nil
 })
 
 guiCreated = true
@@ -3110,107 +3111,3 @@ if IsXenoExecutor() then
 else
     Notify("HollyScriptX [BETA]", "Success Loaded!", 11)
 end
--- Фикс Toggle кнопки для мобильных
-task.spawn(function()
-    task.wait(2)
-    
-    -- Находим ScreenGui библиотеки
-    local obsidianGui = nil
-    local mainFrame = nil
-    
-    -- Ищем GUI Obsidian
-    for _, gui in pairs(CoreGui:GetChildren()) do
-        if gui:IsA("ScreenGui") then
-            for _, child in pairs(gui:GetChildren()) do
-                if child:IsA("Frame") and child.Visible ~= nil then
-                    obsidianGui = gui
-                    mainFrame = child
-                    break
-                end
-            end
-        end
-        if obsidianGui then break end
-    end
-    
-    if not obsidianGui then
-        for _, gui in pairs(LocalPlayer.PlayerGui:GetChildren()) do
-            if gui:IsA("ScreenGui") then
-                for _, child in pairs(gui:GetChildren()) do
-                    if child:IsA("Frame") and child.Visible ~= nil then
-                        obsidianGui = gui
-                        mainFrame = child
-                        break
-                    end
-                end
-            end
-            if obsidianGui then break end
-        end
-    end
-    
-    print("[HollyScriptX] GUI found:", obsidianGui and obsidianGui.Name or "NOT FOUND")
-    print("[HollyScriptX] Main frame:", mainFrame and mainFrame.Name or "NOT FOUND")
-    
-    -- Ищем ВСЕ кнопки Toggle
-    local allGuis = {}
-    for _, g in pairs(CoreGui:GetChildren()) do table.insert(allGuis, g) end
-    for _, g in pairs(LocalPlayer.PlayerGui:GetChildren()) do table.insert(allGuis, g) end
-    
-    for _, gui in pairs(allGuis) do
-        if gui:IsA("ScreenGui") then
-            for _, desc in pairs(gui:GetDescendants()) do
-                if (desc:IsA("TextButton") and (desc.Name == "Toggle" or desc.Text == "Toggle")) or
-                   (desc:IsA("ImageButton") and desc.Name == "Toggle") then
-                    
-                    print("[HollyScriptX] Found toggle: " .. desc:GetFullName())
-                    
-                    -- Отключаем ВСЕ старые
-                    if getconnections then
-                        pcall(function()
-                            for _, c in pairs(getconnections(desc.MouseButton1Click)) do pcall(function() c:Disconnect() end) end
-                        end)
-                        pcall(function()
-                            for _, c in pairs(getconnections(desc.MouseButton1Down)) do pcall(function() c:Disconnect() end) end
-                        end)
-                        pcall(function()
-                            for _, c in pairs(getconnections(desc.Activated)) do pcall(function() c:Disconnect() end) end
-                        end)
-                        pcall(function()
-                            for _, c in pairs(getconnections(desc.InputBegan)) do pcall(function() c:Disconnect() end) end
-                        end)
-                        pcall(function()
-                            for _, c in pairs(getconnections(desc.InputEnded)) do pcall(function() c:Disconnect() end) end
-                        end)
-                    end
-                    
-                    -- Новое подключение
-                    local function doToggle()
-                        -- Пробуем все возможные методы
-                        local ok = pcall(function() Library:Toggle() end)
-                        if ok then print("[HollyScriptX] Library:Toggle() worked") return end
-                        
-                        ok = pcall(function() Window:Toggle() end)
-                        if ok then print("[HollyScriptX] Window:Toggle() worked") return end
-                        
-                        ok = pcall(function() Library:SetOpen(not Library.Open) end)
-                        if ok then print("[HollyScriptX] SetOpen worked") return end
-                        
-                        ok = pcall(function() Library.Open = not Library.Open end)
-                        if ok then print("[HollyScriptX] Library.Open worked") return end
-                        
-                        -- Последний вариант - просто скрыть/показать фрейм
-                        if mainFrame then
-                            mainFrame.Visible = not mainFrame.Visible
-                            print("[HollyScriptX] Direct visibility toggle worked")
-                        end
-                    end
-                    
-                    desc.Activated:Connect(doToggle)
-                    desc.MouseButton1Click:Connect(doToggle)
-                    desc.MouseButton1Down:Connect(doToggle)
-                    
-                    print("[HollyScriptX] Toggle button reconnected!")
-                end
-            end
-        end
-    end
-end)
