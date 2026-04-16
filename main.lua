@@ -2760,24 +2760,6 @@ local Window = Library:CreateWindow({
     ToggleKeybind = Keybinds.Menu
 })
 
-local oldAddDraggableButton = Library.AddDraggableButton
-Library.AddDraggableButton = function(self, Text, Func, ExcludeScaling)
-    local result = oldAddDraggableButton(self, Text, Func, ExcludeScaling)
-    
-    if Text == "Toggle" then
-        local btn = result.Button
-        pcall(function() btn.MouseButton1Click:Disconnect() end)
-        btn.InputBegan:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.Touch then
-                task.wait(0.05)
-                Func(result)
-            end
-        end)
-    end
-    
-    return result
-end
-
 guiCreated = true
 
 for _, notif in ipairs(pendingNotifications) do
